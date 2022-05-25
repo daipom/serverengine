@@ -85,6 +85,7 @@ module ServerEngine
 
       @start_worker_delay = @config[:start_worker_delay] || 0
       @start_worker_delay_rand = @config[:start_worker_delay_rand] || 0.2
+      @restart_worker_delay = @config[:restart_worker_delay] || 0
 
       scale_workers(@config[:workers] || 1)
 
@@ -116,7 +117,11 @@ module ServerEngine
         elsif wid < @num_workers
           # scale up or reboot
           unless @stop
-            @monitors[wid] = delayed_start_worker(wid)
+            if m
+              restart_worker(wid)
+            else
+              start_new_worker(wid)
+            end
             num_alive += 1
           end
 
@@ -129,7 +134,7 @@ module ServerEngine
       return num_alive
     end
 
-    def delayed_start_worker(wid)
+    def start_new_worker(wid)
       if @start_worker_delay > 0
         delay = @start_worker_delay +
           Kernel.rand * @start_worker_delay * @start_worker_delay_rand -
@@ -145,9 +150,52 @@ module ServerEngine
 
       start_worker(wid)
     end
+
+    def restart_worker(wid)
+      m = @monitors[wid]
+
+      if m.restarting?
+        @monitors[wid] = start_worker(wid) if m.delayed_restart_time_passed?
+        return
+      end
+
+      if @restart_worker_delay > 0
+        m.set_delayed_restart(@restart_worker_delay)
+      else
+        @monitors[wid] = start_worker(wid)
+      end
+    end
   end
 
   class WorkerMonitorBase
+    def initialize
+      @is_restarting = false
+      @restart_delay = nil
+      @restart_invoked_time = nil
+    end
+
+    def set_delayed_restart(delay)
+      @is_restarting = true
+      @restart_delay = delay
+      @restart_invoked_time = Time.now.to_f
+    end
+
+    def restarting?
+      @is_restarting
+    end
+
+    def delayed_restart_time_passed?
+      return false unless restarting?
+
+      passed_time = Time.now.to_f - @restart_invoked_time
+
+      # Give up waiting because the time has changed or some other
+      # unexpected situation may occur.
+      return true if passed_time < 0
+
+      return @restart_delay <= passed_time
+    end
+
     def send_stop(stop_graceful)
       raise NotImplementedError, "Must override this"
     end
