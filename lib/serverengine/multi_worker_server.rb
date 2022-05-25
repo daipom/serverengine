@@ -85,7 +85,7 @@ module ServerEngine
 
       @start_worker_delay = @config[:start_worker_delay] || 0
       @start_worker_delay_rand = @config[:start_worker_delay_rand] || 0.2
-      @restart_worker_delay = @config[:restart_worker_delay] || 0
+      @restart_worker_interval = @config[:restart_worker_interval] || 0
 
       scale_workers(@config[:workers] || 1)
 
@@ -146,8 +146,8 @@ module ServerEngine
         return
       end
 
-      if @restart_worker_delay > 0
-        m.set_delayed_restart(@restart_worker_delay)
+      if @restart_worker_interval > 0
+        m.set_delayed_restart(@restart_worker_interval)
       else
         delayed_start_worker(wid)
       end
