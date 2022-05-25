@@ -85,6 +85,7 @@ module ServerEngine
 
       @start_worker_delay = @config[:start_worker_delay] || 0
       @start_worker_delay_rand = @config[:start_worker_delay_rand] || 0.2
+      @restart_worker_delay = @config[:restart_worker_delay] || 0
 
       scale_workers(@config[:workers] || 1)
 
@@ -97,6 +98,7 @@ module ServerEngine
 
     def keepalive_workers
       num_alive = 0
+      is_restarting = false
 
       @monitors.each_with_index do |m,wid|
         if m && m.alive?
@@ -116,6 +118,10 @@ module ServerEngine
         elsif wid < @num_workers
           # scale up or reboot
           unless @stop
+            if m && @restart_worker_delay > 0 && !is_restarting
+              is_restarting = true
+              sleep @restart_worker_delay
+            end
             @monitors[wid] = delayed_start_worker(wid)
             num_alive += 1
           end
