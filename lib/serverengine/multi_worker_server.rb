@@ -85,6 +85,7 @@ module ServerEngine
 
       @start_worker_delay = @config[:start_worker_delay] || 0
       @start_worker_delay_rand = @config[:start_worker_delay_rand] || 0.2
+      @restart_worker_delay = @config[:restart_worker_delay] || 0
 
       scale_workers(@config[:workers] || 1)
 
@@ -116,7 +117,11 @@ module ServerEngine
         elsif wid < @num_workers
           # scale up or reboot
           unless @stop
-            @monitors[wid] = delayed_start_worker(wid)
+            unless m
+              @monitors[wid] = start_new_worker(wid)
+            else
+              @monitors[wid] = restart_worker(wid)
+            end
             num_alive += 1
           end
 
@@ -129,20 +134,39 @@ module ServerEngine
       return num_alive
     end
 
-    def delayed_start_worker(wid)
+    def start_new_worker(wid)
       if @start_worker_delay > 0
-        delay = @start_worker_delay +
-          Kernel.rand * @start_worker_delay * @start_worker_delay_rand -
-          @start_worker_delay * @start_worker_delay_rand / 2
-
-        now = Time.now.to_f
-
-        wait = delay - (now - @last_start_worker_time)
-        sleep wait if wait > 0
-
-        @last_start_worker_time = now
+        delayed_start_worker(wid)
+      else
+        start_worker(wid)
       end
+    end
 
+    def restart_worker(wid)
+      if @restart_worker_delay > 0
+        delayed_restart_worker(wid)
+      else
+        start_worker(wid)
+      end
+    end
+
+    def delayed_start_worker(wid)
+      delay = @start_worker_delay +
+        Kernel.rand * @start_worker_delay * @start_worker_delay_rand -
+        @start_worker_delay * @start_worker_delay_rand / 2
+
+      now = Time.now.to_f
+
+      wait = delay - (now - @last_start_worker_time)
+      sleep wait if wait > 0
+
+      @last_start_worker_time = now
+
+      start_worker(wid)
+    end
+
+    def delayed_restart_worker(wid)
+      sleep @restart_worker_delay
       start_worker(wid)
     end
   end
