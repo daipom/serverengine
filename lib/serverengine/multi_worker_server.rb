@@ -135,6 +135,25 @@ module ServerEngine
     end
 
     def start_new_worker(wid)
+      delayed_start_worker(wid)
+    end
+
+    def restart_worker(wid)
+      m = @monitors[wid]
+
+      if m.restarting?
+        delayed_start_worker(wid) if m.delayed_restart_time_passed?
+        return
+      end
+
+      if @restart_worker_delay > 0
+        m.set_delayed_restart(@restart_worker_delay)
+      else
+        delayed_start_worker(wid)
+      end
+    end
+
+    def delayed_start_worker(wid)
       if @start_worker_delay > 0
         delay = @start_worker_delay +
           Kernel.rand * @start_worker_delay * @start_worker_delay_rand -
@@ -148,22 +167,7 @@ module ServerEngine
         @last_start_worker_time = now
       end
 
-      start_worker(wid)
-    end
-
-    def restart_worker(wid)
-      m = @monitors[wid]
-
-      if m.restarting?
-        @monitors[wid] = start_worker(wid) if m.delayed_restart_time_passed?
-        return
-      end
-
-      if @restart_worker_delay > 0
-        m.set_delayed_restart(@restart_worker_delay)
-      else
-        @monitors[wid] = start_worker(wid)
-      end
+      @monitors[wid] = start_worker(wid)
     end
   end
 
